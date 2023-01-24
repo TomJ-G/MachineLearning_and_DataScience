@@ -3,18 +3,15 @@
 # Volume estimation
 
 In this small project, we would like to see, if it's possible to estimate [unit cell](https://en.wikipedia.org/wiki/Unit_cell). 
-volume with different types of information.
+volume (UC volume) with different types of information.
 
 ## Why is this task not straightforward?
-Arrangement of atoms in unit cell depends on multiple factors: number of atoms, atom types, bonds between atoms, symmetry ect.
-It can even change for the same compound depending on temperature or pressure. I would like to know if it's enough to know chemical data (mass, formula ect), to derrive potential unit cell volume (and in the future projects, if I can predict unit cell geometry: lengths a, b, c and angles alpha, beta, gamma)
-
-
-#### Here, we want to see to what extent volume can be predicted with increasing amount of information.
+The arrangement of atoms in a unit cell depends on multiple factors: number of atoms, atom types, bonds between atoms, symmetry, etc.
+It can even change for the same compound depending on temperature or pressure. I would like to know if it's enough to know chemical data (mass, formula etc), to derive potential unit cell volume (and in future projects, if I can predict unit cell geometry: lengths a, b, c and angles alpha, beta, gamma). I will use increasingly more information (i.e. additional features) to see how prediction accuracy changes.
 
 ## 0) Setting up.
-For the following models, I'll be using around 10000 CIF files from two Journals: Acta Crystallographica C and Organometallics. There are several ways you can download data from COD. The most preffered is to use subversion or rsync (for mode details please check [COD webpage](https://wiki.crystallography.net/howtoobtaincod/)).
-First we need to explore our data. Let's load first file and check how to extract our data. I prepare the list of all CIF files with the following function:
+For the following models, I'll be using around 10000 CIF files from two Journals: Acta Crystallographica C and Organometallics. There are several ways you can download data from COD. The most preferred is to use subversion or rsync (for more details please check [COD webpage](https://wiki.crystallography.net/howtoobtaincod/)).
+First, we need to explore our data. Let's load the first file and check how to extract our data. I prepare the list of all CIF files with the following function:
 
 ```python
 def list_files(root_folder,ftype,Silent=True,deep=True):
@@ -40,9 +37,9 @@ def list_files(root_folder,ftype,Silent=True,deep=True):
 
 ```
 
-Now I can view random file. It can be seen that file structure is not homogeneous. Some parts follow key: value pattern such as:
+Now I can view the random file. It can be seen that the file structure is not homogeneous. Some parts follow key: value patterns such as:
 
-  *(The following data is cut and modified, just to show different parts of file structure)*
+*(The following data is cut and modified, just to show different parts of the file structure)*
 ```
 _cell_length_a                   1.000(1)
 _cell_length_b                   5.0000(1)
@@ -65,8 +62,8 @@ O1 1.0 0.0 0.0 0 Biso 1.000 O
 C1 1.0 0.5 0.5 0.100(7) Biso 1.000 C
 ```
 
-Different parts of file may require from us different data extraction approach. But this is problem for later. 
-First, we should think, which parameters in CIF file can be used to derrive Unit Cell volume.
+Different parts of the file may require from us different data extraction approaches. But this is a problem for later. 
+First, we should think, about which parameters in the CIF file can be used to derive Unit Cell volume.
 The most obvious answer would be: cell geometrc parameters: lengths a, b, c and angles alpha, beta, gamma. Using these would give us answer right away, just by using [formula](https://www.iucr.org/__data/iucr/cifdic_html/1/cif_core.dic/Icell_volume.html). As you may guess, the aim of this project is to use different values, not geometrical parameters.
 
 Next, chemical formula, mass, number and type of atoms can be used to approximate the volume. Atom types should be very useful - each atom has different radius. By using only mass, we will have only very rough estimate - we won't be able to tell what combination of atoms is inside the cell.
