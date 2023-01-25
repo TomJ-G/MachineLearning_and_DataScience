@@ -201,6 +201,85 @@ plt.ylabel('Actual volume')
 ```
 ![image](https://user-images.githubusercontent.com/59794882/214295274-f9decba1-a60c-445e-b8ca-a2c1e65bc182.png)
 
-So how accurate the model is? Not very accurate, which can be shown on few examples of well known compounds.
+It seems that this model will perform better for compounds with smaller UC Volumes, than for big ones.
+We can check some well-known compounds with accurately defined parameters.
+For example: Aluminum Oxide (Al2O3) mass=101.960, Z=6, volume=~250 A^3.
+             Benzene (C6H6) - mass=78.114, Z=4, volume=~448.4
+If we try to predict such compounds the resulting volumes are 928.40 A^3 and 498.07 A^3 respectively.
+It is interesting that Benzene was predicted more acurately than Aluminium Oxide.
 
-#### TBC
+Let's try different model.
+
+## 2) Atom types + temperature
+This time we will use chemical composition of each compound.
+Because we cannot just pass a string with formule e.g. C9H8O2, we need to use encoding.
+We start again with data extraction. Instead od weight we use "_chemical_formula_sum" key.
+```python
+keys = ['_chemical_formula_sum','_cell_formula_units_Z',
+        '_cell_measurement_temperature','_cell_volume']
+optionals = {'_cell_measurement_temperature':297}
+
+#Because we will be working with atom names, we should make sure that ONLY correct atom names are used.
+#To do this, we will check atom names against periodic table.
+periodic_table = ['H','D','He','Li','Be','B','C','N','O','F','Ne','Na','Mg','Al','Si','P','S','Cl','Ar',
+                  'K','Ca','Sc','Ti','V','Cr','Mn','Fe','Co','Ni','Cu','Zn','Ga','Ge','As','Se','Br',
+                  'Kr','Rb','Sr','Y','Zr','Nb','Mo','Tc','Ru','Rh','Pd','Ag','Cd','In','Sn','Sb','Te',
+                  'I','Xe','Cs','Ba','La','Hf','Ta','W','Re','Os','Ir','Pt','Au','Hg','Tl','Pb','Bi',
+                  'Po','At','Rn','Fr','Ra','Ac','Rf','Db','Sg','Bh','Hs','Mt','Ds','Rg','Cn','Nh','Fl',
+                  'Mc','Lv','Ts','Og','Ce','Pr','Nd','Pm','Sm','Eu','Gd','Tb','Dy','Ho','Er','Tm',
+                  'Yb','Lu','Th','Pa','U','Np','Pu','Am','Cm','Bk','Cf','Es','Fm','Md','No','Lr']
+```
+
+For data extraction we use exactly the same function as previously. There is a change in data processing:
+
+```python
+atom_types = []
+atd = {}
+#Now we want to correctly porcess extracted data
+for i,e in enumerate(extracted):
+    #All purely numerical values should be changed to float
+    e[1] = float(e[1])
+    e[2] = float(e[2])
+    e[3] = float(e[3])
+    #Atom list need additional extraction
+    atoms = e[0].split(' ')
+    datom = {}
+    for a in atoms:
+        M = re.match('([A-Za-z]+)(\d*)',a)
+        atom = M[1]
+        if atom not in atom_types and atom in periodic_table:
+            atom_types.append(atom)
+        if M[2] == '':
+            count = 1
+        else:
+            count = float(M[2])
+        datom[atom] = count
+    e[0] = datom
+    if all([True for d in e[0] if d in atom_types]) == False:
+        extracted.pop(i)
+
+atom_types.sort()
+    
+#Prepare encoding
+dt = []
+for e in extracted:
+    row = []
+    for a in atom_types:
+        if a in e[0].keys():
+            val = e[0][a]
+            row.append(val*e[1])
+        else:
+            row.append(0)
+    row.append(e[2])
+    row.append(e[3])
+    dt.append(row)
+    
+DF = pd.DataFrame(dt, columns=[*atom_types,'Temp','Cell Volume'])
+DF.head()
+```
+Which results in:  
+
+![image](https://user-images.githubusercontent.com/59794882/214562792-4d68f2fa-ce6b-4a49-a4be-589d5438c2c5.png)
+
+As you can see, this is **not optimal** way to encode our data. Encoding is very sparse, but we will deal with this later.  
+We again, split data into train and test, separate features from labels and fit the new model.
