@@ -1,5 +1,3 @@
-### Please note, this is still under construction
-
 # Volume estimation
 
 In this small project, we would like to see, if it's possible to estimate [unit cell](https://en.wikipedia.org/wiki/Unit_cell). 
@@ -11,15 +9,17 @@ It can even change for the same compound depending on temperature or pressure. I
 
 ## 0) Setting up.
 For the following models, I'll be using around 10000 CIF files from two Journals: Acta Crystallographica C and Organometallics. There are several ways you can download data from COD. The most preferred is to use subversion or rsync (for more details please check [COD webpage](https://wiki.crystallography.net/howtoobtaincod/)).
-First, we need to explore our data. Let's load the first file and check how to extract our data. I prepare the list of all CIF files with the following function:
+The IDs of structures I used can be used in this folder in ID_list.txt file.  
+Before we start building models, we need to explore our data. Let's load the first file and check how to extract our data. I prepare the list of all CIF files with the following function:
 
 ```python
+#Function was taken out of one of my other projects
 def list_files(root_folder,ftype,Silent=True,deep=True):
     """
     Creates list of files of selected format in the directory.
     Parameters:
         FPATH  - absolute path to the folder with diffraction frames files.
-        ftype  - Extension of file (e.g. 'tif','h5'...)
+        ftype  - Extension of file (e.g. 'cif','h5' ect...)
         Silent - True by default. If set to False, prints information on number of found frames.
         deep   - True by default - check folder and ALL subfolders. If False will only check in FPATH 
     """
@@ -37,45 +37,31 @@ def list_files(root_folder,ftype,Silent=True,deep=True):
 
 ```
 
-Now I can view the random file. It can be seen that the file structure is not homogeneous. Some parts follow key: value patterns such as:
+Now I can view the random file. The data that would be interesting to us is in the form of key: value pairs such as:
 
-*(The following data is cut and modified, just to show different parts of the file structure)*
+*(The following data is cut and modified, just to show different parts of the file structure. The formula is not real one)*
 ```
 _cell_length_a                   1.000(1)
 _cell_length_b                   5.0000(1)
 _cell_length_c                   20.000(3)
 _cell_measurement_temperature    295
 _cell_volume                     100.0
-```
-And in the other parts, we can see atomic coordinates arranged like this:
-```
-loop_
-_atom_site_label
-_atom_site_occupancy
-_atom_site_fract_x
-_atom_site_fract_y
-_atom_site_fract_z
-_atom_site_thermal_displace_type
-_atom_site_B_iso_or_equiv
-_atom_site_type_symbol
-O1 1.0 0.0 0.0 0 Biso 1.000 O
-C1 1.0 0.5 0.5 0.100(7) Biso 1.000 C
+_chemical_formula_sum            'C4 H4 X...'
 ```
 
-Different parts of the file may require from us different data extraction approaches. But this is a problem for later. 
-First, we should think, about which parameters in the CIF file can be used to derive Unit Cell volume.
-The most obvious answer would be: cell geometrc parameters: lengths a, b, c and angles alpha, beta, gamma. Using these would give us answer right away, just by using [formula](https://www.iucr.org/__data/iucr/cifdic_html/1/cif_core.dic/Icell_volume.html). As you may guess, the aim of this project is to use different values, not geometrical parameters.
+We should consider, which parameters in the CIF file can be used to derive Unit Cell volume.
+The most obvious answer would be: cell geometrc parameters: lengths a, b, c and angles alpha, beta, gamma. Using these would give us answer right away, just by using [formula](https://www.iucr.org/__data/iucr/cifdic_html/1/cif_core.dic/Icell_volume.html). But the purpose of this project is to *NOT* use structural data. Structural information can be obtained after compound is studied with XRD of simillar technique. We would like to use only chemical and physical properties, known before XRD experiment.
 
-Next, chemical formula, mass, number and type of atoms can be used to approximate the volume. Atom types should be very useful - each atom has different radius. By using only mass, we will have only very rough estimate - we won't be able to tell what combination of atoms is inside the cell.
-Then there is pressure and temperature. It is known, that by decreasing temperature, or by increasing pressure, the volume of unit cell can be decreased (and in reverse: heating causes UC volume to expand). Such information should be included in the models.
-Lastly, we should be able to tell UC volume very precisely by knowing atomic coordinates. But as I previously mentioned - I would rather estimate UC volume just by chemical information, not by structural data.
+We will use chemical formula, formula mass, number and type of atoms. Also information such as pressure and temperature should be helpful. It is known, that by decreasing temperature, or by increasing pressure, the volume of unit cell can be decreased (and in reverse: heating causes UC volume to expand).
 
-Let's try to make our first model.
+Let's try to make our first model, with the simplest approach possible.
 
 ## 1) Atomic mass + temperature + Z
 
-As mentioned before, using just mass should give us very rough estimate of UC volume. To increase accuracy a little bit, we will also use temperature. In addition, we should extract the "Z" number, which tell us how many symmetrically equivalent parts are in the cell.
-For extraction I used this code:
+Using formula mass should give us very rough estimate of UC volume. Mass is connected with types and number of atoms in the structure.
+To increase accuracy a little bit, we will also use temperature. In addition, we should extract the "Z" number, which tell us how many symmetrically equivalent parts are in the cell.
+For extraction I used this code:  
+  
 ```python
 #Load modules
 import matplotlib.pyplot as plt
@@ -105,7 +91,9 @@ for cif in CIFs:
     if None not in list(data.values()):
         extracted.append(list(data.values()))
 ```
-Because in some cases authors used "," instead of "." in numbers, we must take care of it. Also, we should use floats instead of ints.
+  
+Because in some cases authors used "," instead of "." in numbers, we must take care of it. Also, we should use floats instead of ints.  
+  
 ```python
 for i,e in enumerate(extracted):
     #All purely numerical values should be changed to float
@@ -122,10 +110,14 @@ for i,e in enumerate(extracted):
     e[2] = float(e[2])
     e[3] = float(e[3])
 ```
-we can already split our data into train and test sets.
+We can shuffle the data and then split it into train and test sets. Shuffling can be simply done with "sample" method.
 ```python
-DF = pd.DataFrame(extracted[:len(extracted)-200], columns=['weight','temperature','Z','volume'],dtype=float)
-TST = pd.DataFrame(extracted[-200:], columns=['weight','temperature','Z','volume'],dtype=float)
+DF = pd.DataFrame(extracted, columns=['weight','temperature','Z','volume'],dtype=float)
+DF = DF.sample(frac=1).reset_index().drop(columns='index')
+
+test = DF.iloc[-1000:]
+features = DF.iloc[:-1000]
+labels = features.pop('volume')
 ```
 
 In the next step I define TF model
@@ -134,28 +126,18 @@ In the next step I define TF model
 import tensorflow as tf
 from tensorflow.keras import layers
 
-features = DF.copy()
-labels = features.pop('volume')
-features = np.array(features)
-
-test = TST.copy()
-test_lab = test.pop('volume')
-test = np.array(test)
-
 model = tf.keras.Sequential([
-    layers.LSTM(32,input_shape=(None,1),return_sequences=True),
-    layers.LSTM(32),
-    layers.Dense(32,activation='relu'),
-    layers.Dense(32,activation='relu'),
+    layers.Dense(256,activation='relu'),
+    layers.Dense(128,),
     layers.Dense(1)
 ])
 
 model.compile(loss = tf.keras.losses.MeanSquaredError(),
-                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005))
+                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
 
 callback = tf.keras.callbacks.EarlyStopping(
     monitor='val_loss',
-    patience=2,
+    patience=1,
     verbose=0,
     mode='auto',
     baseline=None,
@@ -165,33 +147,39 @@ callback = tf.keras.callbacks.EarlyStopping(
 Fit the model
 
 ```python
-history = model.fit(features,labels,epochs=100,validation_split=0.2,verbose=0,callbacks=[callback],
-                    batch_size=250)
+history = model.fit(features,labels,epochs=500,validation_split=0.2,verbose=0,callbacks=[callback])
 history_dict = history.history
 ```
-Let's check the loss functions over time.
+Let's check the loss functions over time. We define plotting function
 ```python
-loss = history_dict['loss']
-val_loss = history_dict['val_loss']
+def plot_loss(history_dict):
+    
+    loss = history_dict['loss']
+    val_loss = history_dict['val_loss']
 
-epochs = range(1, len(loss) + 1)
+    epochs = range(1, len(loss) + 1)
 
-plt.plot(epochs, loss, 'ko', label='Training loss',markersize=3)
-plt.plot(epochs, val_loss, 'r', label='Validation loss')
-plt.title('Training and validation loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.legend()
+    plt.plot(epochs, loss, 'ko', markersize=3, label='Training loss')
+    plt.plot(epochs, val_loss, 'r', label='Validation loss')
+    plt.title('Training and validation loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+plot_loss(history_dict)
 ```
-As it can be seen there is an issue: validation loss is lower than training loss!
-![image](https://user-images.githubusercontent.com/59794882/214294284-f8c8416d-09ed-45b6-ae62-96d6cffaa9d6.png)
+As it can be seen there is an issue: validation loss is lower than training loss!  
+![image](https://user-images.githubusercontent.com/59794882/215477219-d4d64aec-f7a6-4e1b-ac48-dc9812c3ac8d.png)
+  
 #### This will be updated in the future, with better model, but in the meanwhile let's look how accurate the model is
 I do this by plotting real volume vs predicted volume of the test set. For ideal fit, datapoints should follow red line (y=x)
 ```python
+test_labels = test.pop("volume")
+
 tested = model.predict(test)
 check = []
 for i,v in enumerate(tested):
-    check.append([*v,test_lab[i]])
+    check.append([*v,test_labels.iloc[i]])
 check = np.array(check)
 plt.rcParams['figure.dpi'] = 100
 plt.scatter(check[:,1],check[:,0],c='k',s=2)
@@ -199,17 +187,12 @@ plt.scatter(range(1000,3500),range(1000,3500),c='r',s=1)
 plt.xlabel('Prediction')
 plt.ylabel('Actual volume')
 ```
-![image](https://user-images.githubusercontent.com/59794882/214295274-f9decba1-a60c-445e-b8ca-a2c1e65bc182.png)
-
-It seems that this model will perform better for compounds with smaller UC Volumes, than for big ones.
-We can check some well-known compounds with accurately defined parameters.
-For example: Aluminum Oxide (Al2O3) mass=101.960, Z=6, volume=~250 A^3.
-             Benzene (C6H6) - mass=78.114, Z=4, volume=~448.4
-If we try to predict such compounds the resulting volumes are 928.40 A^3 and 498.07 A^3 respectively.
-It is interesting that Benzene was predicted more acurately than Aluminium Oxide.
-
-Let's try different model.
-
+  
+![image](https://user-images.githubusercontent.com/59794882/215477320-1c1afd94-94f0-4f20-83f5-6d5bdacd528b.png)
+  
+As it can see, the initial model is not very good. Before we optimize this model, lets try another one.
+  
+  
 ## 2) Atom types + temperature
 This time we will use chemical composition of each compound.
 Because we cannot just pass a string with formule e.g. C9H8O2, we need to use encoding.
@@ -282,4 +265,116 @@ Which results in:
 ![image](https://user-images.githubusercontent.com/59794882/214562792-4d68f2fa-ce6b-4a49-a4be-589d5438c2c5.png)
 
 As you can see, this is **not optimal** way to encode our data. Encoding is very sparse, but we will deal with this later.  
-We again, split data into train and test, separate features from labels and fit the new model.
+We again, shuffle, split the data into train/test, and separate features from labels.
+
+```python
+DF = DF.sample(frac=1).reset_index().drop(columns='index')
+test = DF.iloc[-1000:]
+features = DF.iloc[:-1000]
+
+#features = DF.copy()
+labels = features.pop('Cell Volume')
+features = np.array(features)
+
+model = tf.keras.Sequential([
+    layers.Dense(256,activation='relu'),
+    layers.Dense(128,),
+    layers.Dense(1)
+])
+
+model.compile(loss = tf.keras.losses.MeanSquaredError(),
+                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001),metrics=['accuracy'])
+
+callback = tf.keras.callbacks.EarlyStopping(
+    monitor='val_loss',
+    patience=1,
+    verbose=0,
+    mode='auto',
+    baseline=None,
+    restore_best_weights=False)
+    
+history = model.fit(features,labels,epochs=500,validation_split=0.2,verbose=None)
+history_dict = history.history
+plot_loss(history_dict)
+```
+  
+![image](https://user-images.githubusercontent.com/59794882/215462672-531ee65e-a869-42c6-b98a-d636a5993b3b.png)
+  
+Loss seems to be much lower. Let's see how plot of real/predicted data will perform.
+
+![image](https://user-images.githubusercontent.com/59794882/215463900-404f9451-ab99-4158-b306-100b61d422e7.png)
+  
+It seems that this approach is giving really good results.  
+  
+At this point we might not want to optimize the first model, because this one is performing so much better, and the only modification was to use chemical formula data instead of weight. But, this approach might not seem so good becasue of sparse input. So how do we deal with this?  
+If we insist on using only chemical data, we might try to calculate atomic volumes, and use this information in the model. Atomic radii are well known, we can easily get this data from the web.  
+It should be noted that volume calculated from chemical formula almost always is *different* from unit cell volume due to "void" space in between atoms. Also, we might want to combine this model with the initial one - if we use formula weight and atomic radii.
+
+## 3) Atomic volume + temperature
+First we load atomic data table. The original data contains 109 rows. In this one I added 110th row with data for Deuterium. To simplyfy things, all data for Deuterium is the same as for hydrogen (which is not accurate, but should be enough for us).  
+  
+```python
+table = pd.read_csv("Atom_table.csv",index_col=0)
+ 
+#We don't need other data, only atom symbol and radius
+WdV_table = table[['Symbol','vdW_Radius']].set_index('Symbol')
+
+#We define function for atomic volume
+def atom_vol(atom_type):
+    return(4/3*np.pi*(float(WdV_table.loc[atom_type]))**3) #Volume is in Angstrom^3
+
+#Create DataFrame as in previous cases. Atomic volume is multiplied by Z number.
+dt_2 = []
+for e in extracted:
+    row = []
+    vol = 0
+    for a in atom_types:
+        if a in e[0].keys():
+            val += atom_vol(a)*e[0][a]
+    row.append(val*e[1])
+    row.append(e[2])
+    row.append(e[3])
+    dt_2.append(row)
+DF2 = pd.DataFrame(data=dt_2,columns=['Mol_V','Temp','Cell Volume'])
+```
+Once again, data is shuffled and separated, then we build model, fit data and plot loss
+```python
+DF2 = DF2.sample(frac=1).reset_index().drop(columns='index')
+
+test = DF.iloc[-1000:]
+features = DF.iloc[:-1000]
+
+labels = features.pop('Cell Volume')
+test_labels = test.pop('Cell Volume')
+features = np.array(features)
+
+model = tf.keras.Sequential([
+    layers.Dense(256,activation='relu'),
+    layers.Dense(128,),
+    layers.Dense(1)
+])
+
+model.compile(loss = tf.keras.losses.MeanSquaredError(),
+                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
+
+callback = tf.keras.callbacks.EarlyStopping(
+    monitor='val_loss',
+    patience=1,
+    verbose=0,
+    mode='auto',
+    baseline=None,
+    restore_best_weights=False)
+    
+history = model.fit(features,labels,epochs=500,validation_split=0.2,verbose=None)
+history_dict = history.history
+plot_loss(history_dict)
+```
+  
+![image](https://user-images.githubusercontent.com/59794882/215473454-be1eb71f-68b0-4a07-8cda-3569fe3e5247.png)
+  
+Predicted vs real data:  
+![image](https://user-images.githubusercontent.com/59794882/215473520-ba95f489-bd6d-4bc7-aab8-8db78364764a.png)
+  
+As you can see we managed to get similarly accurate model, with simplified input!
+
+
