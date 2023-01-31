@@ -9,8 +9,8 @@ It can even change for the same compound depending on temperature or pressure. I
 
 ## 0) Setting up.
 For the following models, I'll be using around 10000 CIF files from two Journals: Acta Crystallographica C and Organometallics. There are several ways you can download data from COD. The most preferred is to use subversion or rsync (for more details please check [COD webpage](https://wiki.crystallography.net/howtoobtaincod/)).
-The IDs of structures I used can be used in this folder in ID_list.txt file.  
-Before we start building models, we need to explore our data. Let's load the first file and check how to extract our data. I prepare the list of all CIF files with the following function:
+The IDs of used structures can viewed in ID_list.txt file (in this folder).  
+Before we start building models, we need to explore our data. To prepare the list of all CIF files I used the following function:
 
 ```python
 #Function was taken out of one of my other projects
@@ -37,7 +37,7 @@ def list_files(root_folder,ftype,Silent=True,deep=True):
 
 ```
 
-Now I can view the random file. The data that would be interesting to us is in the form of key: value pairs such as:
+Now I can view the random file. The data which would be interesting to us is in the form of key: value pairs such as:
 
 *(The following data is cut and modified, just to show different parts of the file structure. The formula is not real one)*
 ```
@@ -58,10 +58,9 @@ Let's try to make our first model, with the simplest approach possible.
 
 ## 1) Atomic mass + temperature + Z
 
-Using formula mass should give us very rough estimate of UC volume. Mass is connected with types and number of atoms in the structure.
-To increase accuracy a little bit, we will also use temperature. In addition, we should extract the "Z" number, which tell us how many symmetrically equivalent parts are in the cell.
-For extraction I used this code:  
-  
+Using formula mass should give us very rough estimate of UC volume. Mass is connected with types and number of atoms in the structure, but doesn't give us detail on either.
+To increase accuracy a little bit, we will also use temperature. In addition, we should extract the "Z" number, which tell us how many symmetrically equivalent parts are in the cell. For extraction I used this code:  
+    
 ```python
 #Load modules
 import matplotlib.pyplot as plt
@@ -91,8 +90,8 @@ for cif in CIFs:
     if None not in list(data.values()):
         extracted.append(list(data.values()))
 ```
-  
-Because in some cases authors used "," instead of "." in numbers, we must take care of it. Also, we should use floats instead of ints.  
+
+We need to fix the extracted values. In some cases in numberic values authors used "," instead of "." to indicate fraction. In addition we should use floats instead of ints.  
   
 ```python
 for i,e in enumerate(extracted):
@@ -110,14 +109,20 @@ for i,e in enumerate(extracted):
     e[2] = float(e[2])
     e[3] = float(e[3])
 ```
-We can shuffle the data and then split it into train and test sets. Shuffling can be simply done with "sample" method.
+  
+We can shuffle the data and then split it into train and test sets. Shuffling can be simply done with "sample" method.  
+  
 ```python
-DF = pd.DataFrame(extracted, columns=['weight','temperature','Z','volume'],dtype=float)
-DF = DF.sample(frac=1).reset_index().drop(columns='index')
-
-test = DF.iloc[-1000:]
-features = DF.iloc[:-1000]
-labels = features.pop('volume')
+def Shuffle_and_split(DataFrame,n=1000,popcol='volume'):
+    DataFrame = DataFrame.sample(frac=1).reset_index().drop(columns='index')
+    test = DF.iloc[-n:]
+    features = DF.iloc[:-n]
+    labels = features.pop(popcol)
+    features = np.array(features)
+    test_labels = test.pop(popcol)
+    return(features,labels,test,test_labels)
+    
+features,labels,test,test_labels = Shuffle_and_split(DF)
 ```
 
 In the next step I define TF model
@@ -126,14 +131,21 @@ In the next step I define TF model
 import tensorflow as tf
 from tensorflow.keras import layers
 
-model = tf.keras.Sequential([
-    layers.Dense(256,activation='relu'),
-    layers.Dense(128,),
-    layers.Dense(1)
-])
+def volume_model(lr=0.0001):
+    model = tf.keras.Sequential([
+        layers.Dense(256,activation='relu'),
+        layers.Dense(128,),
+        layers.Dense(1)
+    ])
 
-model.compile(loss = tf.keras.losses.MeanSquaredError(),
-                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
+    model.compile(loss = tf.keras.losses.MeanSquaredError(),
+                          optimizer = tf.keras.optimizers.Adam(learning_rate=lr))
+
+    return(model)
+
+model = volume_model()
+
+
 
 callback = tf.keras.callbacks.EarlyStopping(
     monitor='val_loss',
@@ -143,9 +155,9 @@ callback = tf.keras.callbacks.EarlyStopping(
     baseline=None,
     restore_best_weights=False)
 ```
-
-Fit the model
-
+  
+Fit the model  
+  
 ```python
 history = model.fit(features,labels,epochs=500,validation_split=0.2,verbose=0,callbacks=[callback])
 history_dict = history.history
@@ -174,18 +186,19 @@ As it can be seen there is an issue: validation loss is lower than training loss
 #### This will be updated in the future, with better model, but in the meanwhile let's look how accurate the model is
 I do this by plotting real volume vs predicted volume of the test set. For ideal fit, datapoints should follow red line (y=x)
 ```python
-test_labels = test.pop("volume")
-
-tested = model.predict(test)
-check = []
-for i,v in enumerate(tested):
-    check.append([*v,test_labels.iloc[i]])
-check = np.array(check)
-plt.rcParams['figure.dpi'] = 100
-plt.scatter(check[:,1],check[:,0],c='k',s=2)
-plt.scatter(range(1000,3500),range(1000,3500),c='r',s=1)
-plt.xlabel('Prediction')
-plt.ylabel('Actual volume')
+def real_vs_pred(test_data,test_labels,model):
+    tested = model.predict(test_data)
+    check = []
+    for i,v in enumerate(tested):
+        check.append([*v,test_labels.iloc[i]])
+    check = np.array(check)
+    plt.rcParams['figure.dpi'] = 100
+    plt.scatter(check[:,1],check[:,0],c='k',s=2)
+    plt.scatter(range(1000,3500),range(1000,3500),c='r',s=1)
+    plt.xlabel('Prediction')
+    plt.ylabel('Actual volume')
+    
+real_vs_pred(test,test_labels,model)
 ```
   
 ![image](https://user-images.githubusercontent.com/59794882/215477320-1c1afd94-94f0-4f20-83f5-6d5bdacd528b.png)
@@ -268,32 +281,9 @@ As you can see, this is **not optimal** way to encode our data. Encoding is very
 We again, shuffle, split the data into train/test, and separate features from labels.
 
 ```python
-DF = DF.sample(frac=1).reset_index().drop(columns='index')
-test = DF.iloc[-1000:]
-features = DF.iloc[:-1000]
-
-#features = DF.copy()
-labels = features.pop('Cell Volume')
-features = np.array(features)
-
-model = tf.keras.Sequential([
-    layers.Dense(256,activation='relu'),
-    layers.Dense(128,),
-    layers.Dense(1)
-])
-
-model.compile(loss = tf.keras.losses.MeanSquaredError(),
-                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001),metrics=['accuracy'])
-
-callback = tf.keras.callbacks.EarlyStopping(
-    monitor='val_loss',
-    patience=1,
-    verbose=0,
-    mode='auto',
-    baseline=None,
-    restore_best_weights=False)
-    
-history = model.fit(features,labels,epochs=500,validation_split=0.2,verbose=None)
+features,labels,test,test_labels = Shuffle_and_split(DF,popcol='Cell Volume')
+model2 = volume_model()
+history = model2.fit(features,labels,epochs=500,validation_split=0.2,verbose=0,callbacks=[callback])
 history_dict = history.history
 plot_loss(history_dict)
 ```
@@ -339,34 +329,10 @@ DF2 = pd.DataFrame(data=dt_2,columns=['Mol_V','Temp','Cell Volume'])
 ```
 Once again, data is shuffled and separated, then we build model, fit data and plot loss
 ```python
-DF2 = DF2.sample(frac=1).reset_index().drop(columns='index')
-
-test = DF.iloc[-1000:]
-features = DF.iloc[:-1000]
-
-labels = features.pop('Cell Volume')
-test_labels = test.pop('Cell Volume')
-features = np.array(features)
-
-model = tf.keras.Sequential([
-    layers.Dense(256,activation='relu'),
-    layers.Dense(128,),
-    layers.Dense(1)
-])
-
-model.compile(loss = tf.keras.losses.MeanSquaredError(),
-                      optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001))
-
-callback = tf.keras.callbacks.EarlyStopping(
-    monitor='val_loss',
-    patience=1,
-    verbose=0,
-    mode='auto',
-    baseline=None,
-    restore_best_weights=False)
-    
-history = model.fit(features,labels,epochs=500,validation_split=0.2,verbose=None)
-history_dict = history.history
+features,labels,test,test_labels = Shuffle_and_split(DF2,popcol='Cell Volume')
+model3 = volume_model()
+history = model3.fit(features,labels,epochs=500,validation_split=0.2,verbose=0,callbacks=[callback])
+history_dict = history.history  
 plot_loss(history_dict)
 ```
   
